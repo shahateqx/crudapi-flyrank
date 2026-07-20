@@ -1,4 +1,4 @@
-# Task API
+# CRUD API
 
 A simple RESTful CRUD API built with **Node.js** and **Express.js** as part of the **FlyRank Backend Internship – Week 2 Assignment**.
 
