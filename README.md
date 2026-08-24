@@ -1,73 +1,50 @@
 # CRUD API
 
-A simple RESTful CRUD API built with **Node.js** and **Express.js** as part of the **FlyRank Backend Internship – Week 2 Assignment**.
+A RESTful CRUD API built with Node.js, Express.js, and SQLite.
 
-The API allows users to create, read, update, and delete tasks. It stores data in memory and provides interactive API documentation using **Swagger UI**.
+This project is an upgrade of the Week 2 CRUD API.
+The API endpoints remain the same, but task data is now stored
+in SQLite instead of memory.
 
----
-
-## Features
-
-- Create a new task
-- View all tasks
-- View a task by ID
-- Update an existing task
-- Delete a task
-- Input validation
-- Proper HTTP status codes
-- Interactive Swagger UI documentation
-
----
-
-## Technologies Used
+## Technologies
 
 - Node.js
 - Express.js
-- Swagger UI Express
+- SQLite
+- better-sqlite3
+- Swagger UI
 - OpenAPI 3.0
-- Git
-- GitHub
 
----
+## Why SQLite?
 
-## Project Structure
+SQLite was chosen because:
 
-```
-crud-api/
-│── screenshots/
-│   └── swagger-ui.png
-│
-│── index.js
-│── openapi.json
-│── package.json
-│── package-lock.json
-│── README.md
-└── .gitignore
-```
+- It is a single database file.
+- It requires no separate database server.
+- It requires minimal setup.
+- Data survives server restarts.
 
----
+## Database
+
+The database is stored in:
+
+tasks.db
+
+The file is created automatically when the application starts.
+
+The database contains a `tasks` table with:
+
+- `id`
+- `title`
+- `done`
+
+The database file is ignored by Git so every clone creates
+its own fresh database.
 
 ## Installation
 
-Clone the repository:
-
-```bash
-git clone https://github.com/shahateqx/crudapi-flyrank.git
-```
-
-Go into the project folder:
-
-```bash
-cd crudapi-flyrank
-```
-
-Install dependencies:
-
 ```bash
 npm install
-```
-
----
 
 ## Running the Application
 
@@ -154,27 +131,4 @@ http://localhost:3000/docs
 
 ![Swagger UI](screenshots/swagger-ui.png)
 
----
-
-## Notes
-
-This project stores data **in memory**, so all tasks are reset whenever the server restarts. No database is used in this version.
-
----
-
-## What I Learned
-
-During this project I learned how to:
-
-- Build a RESTful API using Express.js
-- Implement CRUD operations
-- Work with HTTP methods and status codes
-- Validate incoming request data
-- Create interactive API documentation using Swagger UI
-- Use Git and GitHub for version control
-
----
-
-## Author
-
-**Md. Shajjat Hossain Shahat**
+![Database Screenshot](screenshots/DBSQLite.png)
