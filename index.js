@@ -78,21 +78,27 @@ app.get("/tasks/:id", (req, res) => {
 app.post("/tasks", (req, res) => {
     const { title } = req.body;
 
-    if (!title || title.trim() === "") {
+    if (!title || typeof title !== "string" || title.trim() === "") {
         return res.status(400).json({
             error: "Title is required"
         });
     }
 
-    const newTask = {
-        id: tasks.length + 1,
-        title: title,
-        done: false
-    };
+    const result = db
+        .prepare(`
+            INSERT INTO tasks (title, done)
+            VALUES (?, ?)
+        `)
+        .run(title.trim(), 0);
 
-    tasks.push(newTask);
+    const newTask = db
+        .prepare("SELECT * FROM tasks WHERE id = ?")
+        .get(result.lastInsertRowid);
 
-    res.status(201).json(newTask);
+    res.status(201).json({
+        ...newTask,
+        done: Boolean(newTask.done)
+    });
 });
 
 app.put("/tasks/:id", (req, res) => {
