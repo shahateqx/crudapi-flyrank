@@ -1,86 +1,116 @@
 # CRUD API
 
-A RESTful CRUD API built with Node.js, Express.js, and SQLite.
+A RESTful CRUD API built with Node.js, Express.js, and PostgreSQL.
 
-This project is an upgrade of the Week 2 CRUD API.
-The API endpoints remain the same, but task data is now stored
-in SQLite instead of memory.
+This project is an upgrade of the previous CRUD API.
+
+The API endpoints remain the same, but task data is now stored in PostgreSQL and the application can run with Docker Compose.
 
 ## Technologies
 
 - Node.js
 - Express.js
-- SQLite
-- better-sqlite3
+- PostgreSQL
+- `pg`
+- Docker
+- Docker Compose
 - Swagger UI
 - OpenAPI 3.0
 
-## Why SQLite?
-
-SQLite was chosen because:
-
-- It is a single database file.
-- It requires no separate database server.
-- It requires minimal setup.
-- Data survives server restarts.
-
 ## Database
 
-The database is stored in:
+The application uses PostgreSQL.
 
-tasks.db
+The database configuration is provided through the `DATABASE_URL` environment variable.
 
-The file is created automatically when the application starts.
+For local development, create a `.env` file:
 
-The database contains a `tasks` table with:
+```env
+DATABASE_URL=postgres://postgres:dev@localhost:5432/tasks
+```
 
-- `id`
-- `title`
-- `done`
+A template is provided in:
 
-The database file is ignored by Git so every clone creates
-its own fresh database.
+```text
+.env.example
+```
 
-## Installation
+The `.env` file is ignored by Git.
+
+The application automatically creates the `tasks` table when it starts.
+
+If the table is empty, the application inserts three initial tasks.
+
+## Running Locally
+
+Install dependencies:
 
 ```bash
 npm install
+```
 
-## Running the Application
-
-Start the server:
+Start the API:
 
 ```bash
-node index.js
+node --env-file=.env index.js
 ```
 
 The API runs at:
 
-```
+```text
 http://localhost:3000
 ```
 
 Swagger documentation is available at:
 
-```
+```text
 http://localhost:3000/docs
 ```
 
----
+## Running with Docker Compose
+
+Make sure Docker Desktop is running.
+
+Start the complete stack:
+
+```bash
+docker compose up --build
+```
+
+This starts:
+
+* the Node.js API
+* PostgreSQL
+
+The API connects to PostgreSQL using the Compose service name:
+
+```text
+db
+```
+
+The API is available at:
+
+```text
+http://localhost:3000
+```
+
+Stop the stack with:
+
+```bash
+docker compose down
+```
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|---------|----------|-------------|
-| GET | `/` | API information |
-| GET | `/health` | Health check |
-| GET | `/tasks` | Get all tasks |
-| GET | `/tasks/{id}` | Get task by ID |
-| POST | `/tasks` | Create a new task |
-| PUT | `/tasks/{id}` | Update an existing task |
-| DELETE | `/tasks/{id}` | Delete a task |
-
----
+| Method | Endpoint      | Description             |
+| ------ | ------------- | ----------------------- |
+| GET    | `/`           | API information         |
+| GET    | `/health`     | Health check            |
+| GET    | `/tasks`      | Get all tasks           |
+| GET    | `/tasks/{id}` | Get task by ID          |
+| POST   | `/tasks`      | Create a new task       |
+| PUT    | `/tasks/{id}` | Update an existing task |
+| DELETE | `/tasks/{id}` | Delete a task           |
 
 ## Example Request
 
@@ -105,30 +135,40 @@ Content-Type: application/json
 }
 ```
 
----
-
 ## HTTP Status Codes
 
-| Status Code | Meaning |
-|--------------|---------|
-| 200 | Successful request |
-| 201 | Resource created |
-| 204 | Resource deleted successfully |
-| 400 | Invalid request body |
-| 404 | Task not found |
-
----
+| Status Code | Meaning                       |
+| ----------- | ----------------------------- |
+| 200         | Successful request            |
+| 201         | Resource created              |
+| 204         | Resource deleted successfully |
+| 400         | Invalid request               |
+| 404         | Task not found                |
 
 ## Swagger UI
 
 Interactive API documentation is available at:
 
-```
+```text
 http://localhost:3000/docs
 ```
 
-### Screenshot
+## Project Structure
 
-![Swagger UI](screenshots/swagger-ui.png)
+```text
+crud-api/
+├── .env
+├── .env.example
+├── .gitignore
+├── Dockerfile
+├── compose.yaml
+├── index.js
+├── openapi.json
+├── package.json
+├── package-lock.json
+└── screenshots/
+```
 
-![Database Screenshot](screenshots/DBSQLite.png)
+## Author
+
+**Md. Shajjat Hossain Shahat**
