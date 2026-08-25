@@ -1,0 +1,3 @@
+Stage 2 checkpoint:
+GET /tasks returns tasks from PostgreSQL.
+GET /tasks/999 returns 404 with {"error":"Task 999 not found"}.
