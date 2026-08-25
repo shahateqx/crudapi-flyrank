@@ -61,6 +61,12 @@ app.get("/tasks", async (req, res) => {
 app.get("/tasks/:id", async (req, res) => {
     const id = Number(req.params.id);
 
+    if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+            error: "Invalid task ID"
+        });
+    }
+
     const result = await pool.query(
         "SELECT * FROM tasks WHERE id = $1",
         [id]
@@ -98,6 +104,12 @@ app.post("/tasks", async (req, res) => {
 
 app.put("/tasks/:id", async (req, res) => {
     const id = Number(req.params.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+            error: "Invalid task ID"
+        });
+    }
     const { title, done } = req.body;
 
     if (
@@ -131,6 +143,12 @@ app.put("/tasks/:id", async (req, res) => {
 
 app.delete("/tasks/:id", async (req, res) => {
     const id = Number(req.params.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+            error: "Invalid task ID"
+        });
+    }
 
     const result = await pool.query(
         "DELETE FROM tasks WHERE id = $1",
