@@ -1,12 +1,17 @@
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const { Pool } = require("pg");
+const { createClient } = require("@supabase/supabase-js");
 const swaggerDocument = require("./openapi.json");
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_KEY
+);
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL
@@ -170,6 +175,7 @@ initializeDatabase()
     .then(() => {
         app.listen(PORT, () => {
             console.log(`Server running on http://localhost:${PORT}`);
+            console.log("Connected to Supabase");
         });
     })
     .catch((error) => {
