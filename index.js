@@ -64,11 +64,21 @@ app.get("/public/info", (req, res) => {
 });
 
 app.get("/protected/profile", async (req, res) => {
-    const { data, error } = await supabase.auth.getUser();
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({
+            error: "Missing or invalid authorization header"
+        });
+    }
+
+    const token = authHeader.substring(7);
+
+    const { data, error } = await supabase.auth.getUser(token);
 
     if (error || !data.user) {
         return res.status(401).json({
-            error: "Not authenticated"
+            error: "Invalid or expired token"
         });
     }
 
