@@ -57,6 +57,27 @@ app.get("/health", (req, res) => {
     });
 });
 
+app.get("/public/info", (req, res) => {
+    res.json({
+        message: "This is a public route"
+    });
+});
+
+app.get("/protected/profile", async (req, res) => {
+    const { data, error } = await supabase.auth.getUser();
+
+    if (error || !data.user) {
+        return res.status(401).json({
+            error: "Not authenticated"
+        });
+    }
+
+    res.json({
+        id: data.user.id,
+        email: data.user.email
+    });
+});
+
 app.post("/auth/signup", async (req, res) => {
     const { email, password } = req.body;
 
