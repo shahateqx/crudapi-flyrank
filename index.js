@@ -43,6 +43,31 @@ async function initializeDatabase() {
     }
 }
 
+async function requireAuth(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({
+            error: "Missing or invalid authorization header"
+        });
+    }
+
+    const token = authHeader.substring(7);
+
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (error || !data.user) {
+        return res.status(401).json({
+            error: "Invalid or expired token"
+        });
+    }
+
+    req.user = data.user;
+    req.accessToken = token;
+
+    next();
+}
+
 app.get("/", (req, res) => {
     res.json({
         name: "CRUD API",
@@ -63,28 +88,10 @@ app.get("/public/info", (req, res) => {
     });
 });
 
-app.get("/protected/profile", async (req, res) => {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return res.status(401).json({
-            error: "Missing or invalid authorization header"
-        });
-    }
-
-    const token = authHeader.substring(7);
-
-    const { data, error } = await supabase.auth.getUser(token);
-
-    if (error || !data.user) {
-        return res.status(401).json({
-            error: "Invalid or expired token"
-        });
-    }
-
+app.get("/protected/profile", requireAuth, (req, res) => {
     res.json({
-        id: data.user.id,
-        email: data.user.email
+        id: req.user.id,
+        email: req.user.email
     });
 });
 
@@ -148,6 +155,18 @@ app.post("/auth/login", async (req, res) => {
         user: data.user,
         access_token: data.session.access_token
     });
+});
+
+app.post("/auth/logout", requireAuth, async (req, res) => {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+        return res.status(400).json({
+            error: error.message
+        });
+    }
+
+    res.sendStatus(204);
 });
 
 app.get("/tasks", async (req, res) => {
