@@ -57,6 +57,68 @@ app.get("/health", (req, res) => {
     });
 });
 
+app.post("/auth/signup", async (req, res) => {
+    const { email, password } = req.body;
+
+    if (
+        typeof email !== "string" ||
+        email.trim() === "" ||
+        typeof password !== "string" ||
+        password === ""
+    ) {
+        return res.status(400).json({
+            error: "Email and password are required"
+        });
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password
+    });
+
+    if (error) {
+        return res.status(400).json({
+            error: error.message
+        });
+    }
+
+    res.status(201).json({
+        user: data.user,
+        access_token: data.session?.access_token ?? null
+    });
+});
+
+app.post("/auth/login", async (req, res) => {
+    const { email, password } = req.body;
+
+    if (
+        typeof email !== "string" ||
+        email.trim() === "" ||
+        typeof password !== "string" ||
+        password === ""
+    ) {
+        return res.status(400).json({
+            error: "Email and password are required"
+        });
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password
+    });
+
+    if (error) {
+        return res.status(400).json({
+            error: error.message
+        });
+    }
+
+    res.json({
+        user: data.user,
+        access_token: data.session.access_token
+    });
+});
+
 app.get("/tasks", async (req, res) => {
     const result = await pool.query("SELECT * FROM tasks");
 
