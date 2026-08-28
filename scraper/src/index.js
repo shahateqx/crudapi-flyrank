@@ -1,7 +1,9 @@
 const fs = require("fs/promises");
 const path = require("path");
+const cheerio = require("cheerio");
 
 const CACHE_DIR = path.join(__dirname, "..", "cache");
+const OUTPUT_DIR = path.join(__dirname, "..", "output");
 
 const USER_AGENT = "FlyRank-Week5-Scraper/1.0 (educational assignment)";
 const REQUEST_TIMEOUT_MS = 10000;
@@ -9,8 +11,9 @@ const MIN_REQUEST_INTERVAL_MS = 500;
 
 let lastRequestAt = 0;
 
-async function ensureCacheDirectory() {
+async function ensureDirectories() {
     await fs.mkdir(CACHE_DIR, { recursive: true });
+    await fs.mkdir(OUTPUT_DIR, { recursive: true });
 }
 
 function cacheFileName(url) {
@@ -31,7 +34,7 @@ async function waitForPoliteness() {
 }
 
 async function fetchHtml(url) {
-    await ensureCacheDirectory();
+    await ensureDirectories();
 
     const cachePath = cacheFileName(url);
 
@@ -97,6 +100,108 @@ async function fetchHtml(url) {
     }
 }
 
+async function discoverCataloguePages(startUrl, pageLimit = 3) {
+    const pages = [];
+    let currentUrl = startUrl;
+
+    while (currentUrl && pages.length < pageLimit) {
+        const result = await fetchHtml(currentUrl);
+        const $ = cheerio.load(result.html);
+
+        pages.push(currentUrl);
+
+        const nextHref = $("li.next a").attr("href");
+
+        if (!nextHref) {
+            currentUrl = null;
+            break;
+        }
+
+        currentUrl = new URL(nextHref, currentUrl).href;
+    }
+
+    return pages;
+}
+
+async function discoverBookUrls(cataloguePages) {
+    const bookUrls = new Set();
+
+    for (const pageUrl of cataloguePages) {
+        const result = await fetchHtml(pageUrl);
+        const $ = cheerio.load(result.html);
+
+        $("article.product_pod h3 a").each((index, element) => {
+            const href = $(element).attr("href");
+
+            if (href) {
+                const bookUrl = new URL(href, pageUrl).href;
+                bookUrls.add(bookUrl);
+            }
+        });
+    }
+
+    return [...bookUrls];
+}
+
+async function saveBookUrls(bookUrls) {
+    await ensureDirectories();
+
+    const outputPath = path.join(OUTPUT_DIR, "book-urls.json");
+
+    await fs.writeFile(
+        outputPath,
+        JSON.stringify(bookUrls, null, 2),
+        "utf8"
+    );
+
+    return outputPath;
+}
+
+async function main() {
+    const startUrl = "https://books.toscrape.com/";
+
+    console.log("Discovering catalogue pages...");
+
+    const cataloguePages = await discoverCataloguePages(startUrl, 3);
+
+    console.log("Catalogue pages:");
+
+    for (const pageUrl of cataloguePages) {
+        console.log(`- ${pageUrl}`);
+    }
+
+    if (cataloguePages.length !== 3) {
+        throw new Error(
+            `Expected 3 catalogue pages, found ${cataloguePages.length}`
+        );
+    }
+
+    console.log("Discovering book URLs...");
+
+    const bookUrls = await discoverBookUrls(cataloguePages);
+
+    console.log(`Discovered ${bookUrls.length} unique book URLs.`);
+
+    if (bookUrls.length !== 60) {
+        throw new Error(
+            `Expected 60 unique book URLs, found ${bookUrls.length}`
+        );
+    }
+
+    const outputPath = await saveBookUrls(bookUrls);
+
+    console.log(`Saved book URLs to ${outputPath}`);
+}
+
+if (require.main === module) {
+    main().catch(error => {
+        console.error("Stage 2 failed:", error);
+        process.exit(1);
+    });
+}
+
 module.exports = {
-    fetchHtml
+    fetchHtml,
+    discoverCataloguePages,
+    discoverBookUrls
 };
