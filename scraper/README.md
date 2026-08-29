@@ -420,3 +420,11 @@ The completed scraper demonstrates:
 - JSON outputs
 - run-level reporting
 - a documented JavaScript/browser comparison lane
+  
+## Broken URL Test Evidence
+
+The scraper was tested with one deliberately invalid book URL.
+
+The invalid page returned `HTTP 404 Not Found`, while the scraper continued running and preserved all 60 valid books.
+
+![Broken URL test evidence](../screenshots/broken-url-test.png)
