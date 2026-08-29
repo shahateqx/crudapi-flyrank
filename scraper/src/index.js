@@ -7,7 +7,9 @@ const { z } = require("zod");
 const CACHE_DIR = path.join(__dirname, "..", "cache");
 const OUTPUT_DIR = path.join(__dirname, "..", "output");
 
-const USER_AGENT = "FlyRank-Week5-Scraper/1.0 (educational assignment)";
+const USER_AGENT =
+    "FlyRank-Week5-Scraper/1.0 (educational assignment)";
+
 const REQUEST_TIMEOUT_MS = 10000;
 const MIN_REQUEST_INTERVAL_MS = 500;
 
@@ -45,7 +47,7 @@ async function waitForPoliteness() {
     }
 }
 
-async function fetchHtml(url) {
+async function fetchHtml(url, options = {}) {
     await ensureDirectories();
 
     const cachePath = cacheFileName(url);
@@ -54,6 +56,10 @@ async function fetchHtml(url) {
         const cachedHtml = await fs.readFile(cachePath, "utf8");
 
         console.log(`[CACHE] ${url}`);
+
+        if (options.stats) {
+            options.stats.cacheHits++;
+        }
 
         return {
             url,
@@ -66,51 +72,88 @@ async function fetchHtml(url) {
         }
     }
 
-    await waitForPoliteness();
+    const maxAttempts = 2;
 
-    const startedAt = Date.now();
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        await waitForPoliteness();
 
-    console.log(`[FETCH] ${url}`);
-
-    const controller = new AbortController();
-
-    const timeout = setTimeout(() => {
-        controller.abort();
-    }, REQUEST_TIMEOUT_MS);
-
-    try {
-        const response = await fetch(url, {
-            headers: {
-                "User-Agent": USER_AGENT
-            },
-            signal: controller.signal
-        });
-
-        if (!response.ok) {
-            throw new Error(
-                `HTTP ${response.status} ${response.statusText}`
-            );
-        }
-
-        const html = await response.text();
-
-        await fs.mkdir(CACHE_DIR, { recursive: true });
-        await fs.writeFile(cachePath, html, "utf8");
-
-        lastRequestAt = Date.now();
+        const startedAt = Date.now();
 
         console.log(
-            `[FETCHED] ${url} (${Date.now() - startedAt} ms)`
+            `[FETCH] ${url}${attempt > 1 ? ` (retry ${attempt - 1})` : ""}`
         );
 
-        return {
-            url,
-            html,
-            cached: false
-        };
-    } finally {
-        clearTimeout(timeout);
+        const controller = new AbortController();
+
+        const timeout = setTimeout(() => {
+            controller.abort();
+        }, REQUEST_TIMEOUT_MS);
+
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    "User-Agent": USER_AGENT
+                },
+                signal: controller.signal
+            });
+
+            if (!response.ok) {
+                const error = new Error(
+                    `HTTP ${response.status} ${response.statusText}`
+                );
+
+                error.status = response.status;
+
+                throw error;
+            }
+
+            const html = await response.text();
+
+            await fs.writeFile(cachePath, html, "utf8");
+
+            lastRequestAt = Date.now();
+
+            if (options.stats) {
+                options.stats.pagesFetched++;
+            }
+
+            console.log(
+                `[FETCHED] ${url} (${Date.now() - startedAt} ms)`
+            );
+
+            return {
+                url,
+                html,
+                cached: false
+            };
+        } catch (error) {
+            const isTimeout =
+                error.name === "AbortError";
+
+            const isServerError =
+                Number.isInteger(error.status) &&
+                error.status >= 500 &&
+                error.status <= 599;
+
+            const shouldRetry =
+                attempt === 1 &&
+                (isTimeout || isServerError);
+
+            if (!shouldRetry) {
+                throw error;
+            }
+
+            console.log(
+                `[RETRY] ${url} after ${error.message}`
+            );
+
+            await sleep(1000);
+        } finally {
+            clearTimeout(timeout);
+        }
     }
+
+    throw new Error(`Failed to fetch ${url}`);
 }
 
 async function discoverCataloguePages(startUrl, pageLimit = 3) {
@@ -159,13 +202,25 @@ async function discoverBookUrls(cataloguePages) {
 function extractBookDetails(html, productUrl, sourcePage) {
     const $ = cheerio.load(html);
 
-    const title = $("div.product_main h1").text().trim();
+    const title = $("div.product_main h1")
+        .text()
+        .trim();
 
-    const priceText = $("p.price_color").first().text().trim();
+    const priceText = $("p.price_color")
+        .first()
+        .text()
+        .trim();
 
-    const availabilityText = $("p.availability").first().text().replace(/\s+/g, " ").trim();
+    const availabilityText = $("p.availability")
+        .first()
+        .text()
+        .replace(/\s+/g, " ")
+        .trim();
 
-    const ratingText = $("p.star-rating").first().attr("class") || "";
+    const ratingText =
+        $("p.star-rating")
+            .first()
+            .attr("class") || "";
 
     const description = $("#product_description")
         .next("p")
@@ -184,8 +239,9 @@ function extractBookDetails(html, productUrl, sourcePage) {
     };
 }
 
-async function extractAllBooks(bookUrls, sourcePage) {
+async function extractAllBooks(bookUrls, sourcePage, stats) {
     const books = [];
+    const errors = [];
 
     for (let index = 0; index < bookUrls.length; index++) {
         const productUrl = bookUrls[index];
@@ -194,22 +250,43 @@ async function extractAllBooks(bookUrls, sourcePage) {
             `Extracting book ${index + 1}/${bookUrls.length}`
         );
 
-        const result = await fetchHtml(productUrl);
+        try {
+            const result = await fetchHtml(
+                productUrl,
+                { stats }
+            );
 
-        const book = extractBookDetails(
-            result.html,
-            productUrl,
-            sourcePage
-        );
+            const book = extractBookDetails(
+                result.html,
+                productUrl,
+                sourcePage
+            );
 
-        books.push(book);
+            books.push(book);
+        } catch (error) {
+            console.error(
+                `[FAILED] ${productUrl}: ${error.message}`
+            );
+
+            errors.push({
+                url: productUrl,
+                reason: error.message
+            });
+
+            stats.failedPages++;
+        }
     }
 
-    return books;
+    return {
+        books,
+        errors
+    };
 }
 
 function normalizeBook(book) {
-    const priceMatch = book.price_text.match(/£\s*([0-9]+(?:\.[0-9]+)?)/);
+    const priceMatch = book.price_text.match(
+        /£\s*([0-9]+(?:\.[0-9]+)?)/
+    );
 
     const price_gbp = priceMatch
         ? Number(priceMatch[1])
@@ -248,7 +325,10 @@ function validateBooks(books) {
             errors.push({
                 record: normalized,
                 reason: result.error.issues
-                    .map(issue => `${issue.path.join(".")}: ${issue.message}`)
+                    .map(
+                        issue =>
+                            `${issue.path.join(".")}: ${issue.message}`
+                    )
                     .join("; ")
             });
         }
@@ -263,7 +343,10 @@ function validateBooks(books) {
 async function saveBookUrls(bookUrls) {
     await ensureDirectories();
 
-    const outputPath = path.join(OUTPUT_DIR, "book-urls.json");
+    const outputPath = path.join(
+        OUTPUT_DIR,
+        "book-urls.json"
+    );
 
     await fs.writeFile(
         outputPath,
@@ -277,7 +360,10 @@ async function saveBookUrls(bookUrls) {
 async function saveBooks(books) {
     await ensureDirectories();
 
-    const outputPath = path.join(OUTPUT_DIR, "books.json");
+    const outputPath = path.join(
+        OUTPUT_DIR,
+        "books.json"
+    );
 
     await fs.writeFile(
         outputPath,
@@ -291,7 +377,10 @@ async function saveBooks(books) {
 async function saveErrors(errors) {
     await ensureDirectories();
 
-    const outputPath = path.join(OUTPUT_DIR, "errors.json");
+    const outputPath = path.join(
+        OUTPUT_DIR,
+        "errors.json"
+    );
 
     await fs.writeFile(
         outputPath,
@@ -302,12 +391,46 @@ async function saveErrors(errors) {
     return outputPath;
 }
 
+async function saveRunReport(report) {
+    await ensureDirectories();
+
+    const outputPath = path.join(
+        OUTPUT_DIR,
+        "run-report.json"
+    );
+
+    await fs.writeFile(
+        outputPath,
+        JSON.stringify(report, null, 2),
+        "utf8"
+    );
+
+    return outputPath;
+}
+
 async function main() {
-    const startUrl = "https://books.toscrape.com/";
+    const startUrl =
+        "https://books.toscrape.com/";
+
+    const startedAt = new Date();
+
+    const stats = {
+        pagesFetched: 0,
+        cacheHits: 0,
+        failedPages: 0,
+        booksDiscovered: 0,
+        booksExtracted: 0,
+        booksValid: 0,
+        booksInvalid: 0
+    };
 
     console.log("Discovering catalogue pages...");
 
-    const cataloguePages = await discoverCataloguePages(startUrl, 3);
+    const cataloguePages =
+        await discoverCataloguePages(
+            startUrl,
+            3
+        );
 
     if (cataloguePages.length !== 3) {
         throw new Error(
@@ -317,9 +440,16 @@ async function main() {
 
     console.log("Discovering book URLs...");
 
-    const bookUrls = await discoverBookUrls(cataloguePages);
+    const bookUrls =
+        await discoverBookUrls(
+            cataloguePages
+        );
 
-    console.log(`Discovered ${bookUrls.length} unique book URLs.`);
+    stats.booksDiscovered = bookUrls.length;
+
+    console.log(
+        `Discovered ${bookUrls.length} unique book URLs.`
+    );
 
     if (bookUrls.length !== 60) {
         throw new Error(
@@ -328,31 +458,74 @@ async function main() {
     }
 
     await saveBookUrls(bookUrls);
-
     console.log("Extracting book details...");
 
-    const books = await extractAllBooks(
+    const extractionResult = await extractAllBooks(
         bookUrls,
-        cataloguePages[0]
+        cataloguePages[0],
+        stats
     );
 
-    console.log(`Extracted ${books.length} books.`);
+    console.log(
+        `Extracted ${extractionResult.books.length} books.`
+    );
 
-    const { validBooks, errors } = validateBooks(books);
+    const { validBooks, errors: validationErrors } =
+        validateBooks(extractionResult.books);
+
+    const errors = [
+        ...extractionResult.errors,
+        ...validationErrors
+    ];
+
+    stats.booksExtracted = extractionResult.books.length;
+    stats.booksValid = validBooks.length;
+    stats.booksInvalid = validationErrors.length;
 
     console.log(`Valid records: ${validBooks.length}`);
-    console.log(`Invalid records: ${errors.length}`);
+    console.log(`Invalid records: ${validationErrors.length}`);
+    console.log(`Failed pages: ${extractionResult.errors.length}`);
 
     const booksPath = await saveBooks(validBooks);
     const errorsPath = await saveErrors(errors);
+	
+    const finishedAt = new Date();
 
-    console.log(`Saved books to ${booksPath}`);
-    console.log(`Saved errors to ${errorsPath}`);
+    const runReport = {
+        started_at: startedAt.toISOString(),
+        finished_at: finishedAt.toISOString(),
+        duration_ms:
+            finishedAt.getTime() -
+            startedAt.getTime(),
+        start_url: startUrl,
+        catalogue_pages: cataloguePages,
+        stats,
+        errors_count: errors.length
+    };
+
+    const reportPath =
+        await saveRunReport(runReport);
+
+    console.log(
+        `Saved books to ${booksPath}`
+    );
+
+    console.log(
+        `Saved errors to ${errorsPath}`
+    );
+
+    console.log(
+        `Saved run report to ${reportPath}`
+    );
 }
 
 if (require.main === module) {
     main().catch(error => {
-        console.error("Stage 3 failed:", error);
+        console.error(
+            "Scraper failed:",
+            error
+        );
+
         process.exit(1);
     });
 }
@@ -362,5 +535,8 @@ module.exports = {
     discoverCataloguePages,
     discoverBookUrls,
     extractBookDetails,
-    extractAllBooks
+    extractAllBooks,
+    normalizeBook,
+    validateBooks,
+    saveRunReport
 };
