@@ -2,6 +2,7 @@ const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
 const cheerio = require("cheerio");
+const { z } = require("zod");
 
 const CACHE_DIR = path.join(__dirname, "..", "cache");
 const OUTPUT_DIR = path.join(__dirname, "..", "output");
@@ -207,6 +208,58 @@ async function extractAllBooks(bookUrls, sourcePage) {
     return books;
 }
 
+function normalizeBook(book) {
+    const priceMatch = book.price_text.match(/£\s*([0-9]+(?:\.[0-9]+)?)/);
+
+    const price_gbp = priceMatch
+        ? Number(priceMatch[1])
+        : null;
+
+    return {
+        ...book,
+        price_gbp
+    };
+}
+
+const bookSchema = z.object({
+    title: z.string().min(1),
+    product_url: z.string().url().startsWith("https://"),
+    price_text: z.string().min(1),
+    price_gbp: z.number().nonnegative(),
+    availability_text: z.string().min(1),
+    rating_text: z.string().min(1),
+    description: z.string(),
+    source_page: z.string().url().startsWith("https://"),
+    fetched_at: z.string().datetime()
+});
+
+function validateBooks(books) {
+    const validBooks = [];
+    const errors = [];
+
+    for (const book of books) {
+        const normalized = normalizeBook(book);
+
+        const result = bookSchema.safeParse(normalized);
+
+        if (result.success) {
+            validBooks.push(result.data);
+        } else {
+            errors.push({
+                record: normalized,
+                reason: result.error.issues
+                    .map(issue => `${issue.path.join(".")}: ${issue.message}`)
+                    .join("; ")
+            });
+        }
+    }
+
+    return {
+        validBooks,
+        errors
+    };
+}
+
 async function saveBookUrls(bookUrls) {
     await ensureDirectories();
 
@@ -229,6 +282,20 @@ async function saveBooks(books) {
     await fs.writeFile(
         outputPath,
         JSON.stringify(books, null, 2),
+        "utf8"
+    );
+
+    return outputPath;
+}
+
+async function saveErrors(errors) {
+    await ensureDirectories();
+
+    const outputPath = path.join(OUTPUT_DIR, "errors.json");
+
+    await fs.writeFile(
+        outputPath,
+        JSON.stringify(errors, null, 2),
         "utf8"
     );
 
@@ -271,9 +338,16 @@ async function main() {
 
     console.log(`Extracted ${books.length} books.`);
 
-    const booksPath = await saveBooks(books);
+    const { validBooks, errors } = validateBooks(books);
+
+    console.log(`Valid records: ${validBooks.length}`);
+    console.log(`Invalid records: ${errors.length}`);
+
+    const booksPath = await saveBooks(validBooks);
+    const errorsPath = await saveErrors(errors);
 
     console.log(`Saved books to ${booksPath}`);
+    console.log(`Saved errors to ${errorsPath}`);
 }
 
 if (require.main === module) {
